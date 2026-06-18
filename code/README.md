@@ -33,7 +33,7 @@ python main.py --input /path/to/input.csv --output /path/to/output.csv
 
 ## Architecture
 
-Single Claude agent (claude-sonnet-4-6) with 3 tools:
+Single Claude agent (claude-sonnet-4-6) with 4 tools:
 
 ```
 ticket_in

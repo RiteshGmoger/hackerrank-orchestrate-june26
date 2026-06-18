@@ -5,10 +5,11 @@ Terminal AI agent for a 24-hour hackathon.
 Reads support tickets from CSV → classifies → retrieves docs → replies or escalates → writes output CSV.
 
 ## Architecture (decided, do not change)
-Single Claude agent (claude-sonnet-4-6) with 3 tools:
+Single Claude agent (claude-sonnet-4-6) with 4 tools:
 - retrieve_docs: BM25 search over provided corpus
 - classify_ticket: domain + request_type classification (Haiku)
 - check_escalation: grounding check (Haiku)
+- format_output: forced structured output — zero parse errors
 
 Pre-retrieval risk gate (no LLM) → agent tool loop → Pydantic output validation.
 

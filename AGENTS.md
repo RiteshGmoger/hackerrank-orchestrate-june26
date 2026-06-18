@@ -16,7 +16,7 @@ Format:
 ## Project Context
 This is a 24-hour competitive hackathon. Every architectural decision matters
 and will be defended in a 30-minute voice interview with an AI judge.
-Architecture: single Claude agent (claude-sonnet-4-6) with 3 tools + BM25 RAG.
+Architecture: single Claude agent (claude-sonnet-4-6) with 4 tools + BM25 RAG.
 
 ## Rules
 - Never hardcode API keys — read from environment variables only

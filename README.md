@@ -8,7 +8,7 @@ retrieves relevant documentation via BM25 RAG, and either replies with a grounde
 answer or escalates. Outputs one row per ticket to output.csv.
 
 ## Architecture
-Single Claude agent (claude-sonnet-4-6) with 3 tools + BM25 RAG.
+Single Claude agent (claude-sonnet-4-6) with 4 tools + BM25 RAG.
 Pre-retrieval risk gate catches prompt injection before spending any tokens.
 
 See `code/README.md` for setup and run instructions.

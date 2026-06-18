@@ -6,9 +6,6 @@ from config import MODEL_FAST, MAX_TOKENS, TEMPERATURE, DOMAINS, TOP_K, MAX_RETR
 
 client = Anthropic()
 
-# FIX: wrap corpus loading in try/except.
-# Previously: crash on import if data/ doesn't exist (e.g. before 11 AM day-of).
-# Now: safe empty state, retrieve_docs returns "No corpus loaded" and agent escalates.
 try:
     CORPUS = load_corpus()
     BM25 = build_bm25(CORPUS)
@@ -65,12 +62,12 @@ Output ONLY valid JSON: {{"q1": "...", "q2": "..."}}"""}]
     except Exception:
         queries = [query]  # fallback: single query if rephrasing fails
 
-    seen_sources: set[str] = set()
+    seen_chunks = set()
     all_results = []
     for q in queries:
         for r in retrieve(q, domain, CORPUS, BM25):
-            if r.source_file not in seen_sources:
-                seen_sources.add(r.source_file)
+            if r.chunk_text not in seen_chunks:
+                seen_chunks.add(r.chunk_text)
                 all_results.append(r)
 
     all_results.sort(key=lambda r: r.relevance_score, reverse=True)
