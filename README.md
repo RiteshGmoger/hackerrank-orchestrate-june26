@@ -1,6 +1,6 @@
 # HackerRank Orchestrate June 2026
 
-24-hour solo hackathon submission by Ritesh.
+24-hour solo hackathon submission by Ritesh
 
 ## What It Does
 Terminal AI agent that reads support tickets from a CSV, classifies them by domain,

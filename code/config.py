@@ -2,8 +2,6 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# FIX: load .env BEFORE reading os.environ — without this, ANTHROPIC_API_KEY
-# would raise KeyError even if correctly set in .env file
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 ROOT = Path(__file__).parent.parent
@@ -24,8 +22,8 @@ CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64  # overlap between chunks prevents splitting mid-sentence
 
 MAX_TOOL_ITERATIONS = 10  # safety cap on agent tool-use loop
-MAX_RETRIES = 3           # retries for transient API failures (rate limits, 5xx)
-RETRY_DELAY = 1.0         # seconds before first retry; doubles each attempt (exponential backoff)
+MAX_RETRIES = 3           # retries for transient API failures
+RETRY_DELAY = 1.0         # seconds before first retry; doubles each attempt
 
 ESCALATION_TRIGGERS = [
     "legal action", "lawsuit", "fraud", "unauthorized charge",
@@ -35,7 +33,7 @@ ESCALATION_TRIGGERS = [
     "DAN", "system prompt", "SYSTEM:"
 ]
 # NOTE: "act as" removed from ESCALATION_TRIGGERS — too broad, causes false positives
-# on legitimate tickets like "act as if my account was new".
-# Prompt injection patterns in risk_gate.py handle the actual injection cases.
+# on legitimate tickets like "act as if my account was new"
+# Prompt injection patterns in risk_gate.py handle the actual injection cases
 
 DOMAINS = []  # fill in on day-of from data/ folder names

@@ -2,7 +2,7 @@
 
 ## What This Project Is
 Terminal AI agent for a 24-hour hackathon.
-Reads support tickets from CSV → classifies → retrieves docs → replies or escalates → writes output CSV.
+Reads support tickets from CSV -> classifies -> retrieves docs -> replies or escalates -> writes output CSV.
 
 ## Architecture (decided, do not change)
 Single Claude agent (claude-sonnet-4-6) with 4 tools:

@@ -3,30 +3,30 @@ from config import ESCALATION_TRIGGERS
 
 def should_escalate(text: str) -> tuple[bool, str]:
     """
-    Pre-retrieval safety gate. Runs BEFORE any LLM call.
-    Purpose: catch prompt injection and high-risk tickets instantly without spending tokens.
+        Pre-retrieval safety gate. Runs BEFORE any LLM call
+        Purpose: catch prompt injection and high-risk tickets instantly without spending tokens
+        
+        Why keyword-based and not LLM-based:
+            - Zero latency — no API call needed
+            - Deterministic — same input always same output
+            - Prompt injection must be caught BEFORE the LLM sees the text
 
-    Why keyword-based and not LLM-based:
-    - Zero latency — no API call needed
-    - Deterministic — same input always same output
-    - Prompt injection must be caught BEFORE the LLM sees the text
-
-    Returns (should_escalate: bool, reason: str)
+        Returns (should_escalate: bool, reason: str)
     """
-    # Guard: empty or whitespace-only messages can't be processed meaningfully
+    # empty or whitespace-only messages can't be processed meaningfully
     if not text or not text.strip():
-        return True, "Empty or whitespace-only message — cannot process ticket"
+        return True, "Empty or whitespace-only message - cannot process ticket"
 
-    # Length check: extremely long inputs are likely adversarial (context stuffing)
+    # length check: extremely long inputs are likely adversarial
     if len(text) > 5000:
-        return True, f"Message exceeds 5000 chars ({len(text)} chars) — possible context stuffing attack"
+        return True, f"Message exceeds 5000 chars ({len(text)} chars) - possible context stuffing attack"
 
     t = text.lower()
 
     # Prompt injection / jailbreak detection
-    # NOTE: patterns are specific enough to avoid false positives on legitimate tickets.
-    # "act as" removed — too broad (e.g. "act as if my account was reset" is legitimate).
-    # Using more specific multi-word patterns instead.
+    # NOTE: patterns are specific enough to avoid false positives on legitimate tickets
+    # "act as" removed - too broad (e.g. "act as if my account was reset" is legitimate)
+    # Using more specific multi-word patterns instead
     injection_patterns = [
         "ignore previous instructions",
         "ignore all instructions",
