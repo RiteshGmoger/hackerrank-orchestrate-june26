@@ -1,4 +1,6 @@
-
-# local env / venv
-code/.venv/
-code/.env
+.venv/
+__pycache__/
+*.pyc
+.env
+*.csv
+data/
