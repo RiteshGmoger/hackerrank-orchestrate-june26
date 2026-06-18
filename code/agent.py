@@ -64,6 +64,16 @@ TOOLS = [
     }
 ]
 
+# FIX: two separate tool lists.
+# TOOLS_PROCESS: only the 3 working tools — format_output is NOT visible to the model yet.
+# Without this split, Claude can call format_output prematurely (before classify/retrieve/check),
+# producing an incomplete output that bypasses all retrieval.
+# TOOLS_ALL: all 4 tools, only exposed when all 3 required tools have been called.
+TOOLS_PROCESS = TOOLS[:3]   # classify_ticket, retrieve_docs, check_escalation
+TOOLS_ALL = TOOLS            # includes format_output — exposed only at final step
+
+REQUIRED_BEFORE_OUTPUT = {"classify_ticket", "retrieve_docs", "check_escalation"}
+
 SYSTEM_PROMPT = """You are a precise support triage agent. Process each ticket in this exact order:
 1. classify_ticket → get domain and request_type
 2. retrieve_docs → get relevant corpus chunks (use domain from step 1)
@@ -73,8 +83,19 @@ SYSTEM_PROMPT = """You are a precise support triage agent. Process each ticket i
 Rules:
 - NEVER make up policies not in the retrieved docs
 - If docs don't cover the issue → escalate
-- justification must be specific: name the exact corpus gap or risk reason
-- If escalating: response must be empty string"""
+- If escalating: response must be empty string ""
+
+Justification field MUST be specific — generic justifications score 0.
+Format: "[action] because [exact reason]. Reference: [source file if applicable]"
+
+BAD:  "Escalated: out of scope"
+GOOD: "Escalated: ticket requests chargeback on order placed 45 days ago — corpus covers disputes within 30 days only (billing/refund_policy.md)"
+
+BAD:  "Replied with policy information"
+GOOD: "Replied: password reset steps found in account/authentication.md — provided 4-step flow matching user platform (web)"
+
+BAD:  "High-risk keyword detected"
+GOOD: "Escalated by risk gate: message contains 'unauthorized charge' — financial fraud pattern requires human review, not automated response" """
 
 
 def _call_tool(name: str, inputs: dict) -> str:
@@ -85,20 +106,28 @@ def _call_tool(name: str, inputs: dict) -> str:
     elif name == "check_escalation":
         return check_escalation(inputs["ticket_text"], inputs["retrieved_chunks"])
     elif name == "format_output":
-        return json.dumps(inputs)  # just echo back — we capture this below
+        return json.dumps(inputs)  # echo back — captured below in the caller
     return f"Unknown tool: {name}"
 
 
 def run_agent(raw_ticket: dict) -> AgentOutput:
     """
-    Single Claude agent with 4 tools. format_output is forced as final step.
+    Single Claude agent with 4 tools. format_output forced as final step.
+
     Why forced tool_choice for output: eliminates regex JSON parsing entirely.
-    Why single agent over multi-agent: official data shows single agent won (rank 1),
-    multi-agent averaged rank 468.
+    format_output schema IS the schema — validation happens in Pydantic, not string parsing.
+
+    Why single agent over multi-agent: official post-mortem data shows single agent
+    with tools won (rank 1), multi-agent averaged rank 468.
+
+    Why two tool lists (TOOLS_PROCESS vs TOOLS_ALL): prevents model from calling
+    format_output before retrieve/classify/check have run. Without this, early
+    format_output calls bypass all retrieval and produce hallucinated outputs.
     """
     ticket_id = raw_ticket.get("ticket_id", "unknown")
     message = raw_ticket.get("message", raw_ticket.get("body", ""))
 
+    # Pre-check: no LLM needed, instant, catches injection + high-risk keywords
     escalate, reason = should_escalate(message)
     if escalate:
         return AgentOutput(
@@ -120,9 +149,17 @@ def run_agent(raw_ticket: dict) -> AgentOutput:
         )
     }]
 
+    # Track which tools have been called — robust vs naive message count.
+    # Message count breaks if agent calls a tool twice or changes order.
+    tools_called: set[str] = set()
+
     for _ in range(MAX_TOOL_ITERATIONS):
-        # For the final step, force format_output to guarantee schema compliance
-        is_final_step = len(messages) >= 7  # classify + retrieve + escalation done
+        is_final_step = REQUIRED_BEFORE_OUTPUT.issubset(tools_called)
+
+        # FIX: only expose format_output when all 3 required tools have been called.
+        # During processing steps, model only sees the 3 working tools — it cannot
+        # call format_output early even if it "wants" to.
+        current_tools = TOOLS_ALL if is_final_step else TOOLS_PROCESS
         tool_choice = (
             {"type": "tool", "name": "format_output"}
             if is_final_step
@@ -134,55 +171,63 @@ def run_agent(raw_ticket: dict) -> AgentOutput:
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
             system=SYSTEM_PROMPT,
-            tools=TOOLS,
+            tools=current_tools,
             tool_choice=tool_choice,
             messages=messages
         )
 
         if response.stop_reason == "end_turn":
-            # Should not happen if format_output forced correctly — escalate for safety
+            # Should not happen with forced format_output — escalate for safety
             return AgentOutput(
                 ticket_id=ticket_id, status="escalated", product_area="unknown",
-                response="", justification="Agent ended without calling format_output",
+                response="", justification="Agent ended without calling format_output — escalating for safety",
                 request_type="product_issue"
             )
 
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []
+
             for block in response.content:
-                if block.type == "tool_use":
-                    if block.name == "format_output":
-                        # Capture structured output directly from tool inputs
-                        try:
-                            data = dict(block.input)
-                            data["ticket_id"] = ticket_id
-                            return AgentOutput(**data)
-                        except Exception as e:
-                            return AgentOutput(
-                                ticket_id=ticket_id, status="escalated",
-                                product_area="unknown", response="",
-                                justification=f"format_output schema error: {e}",
-                                request_type="product_issue"
-                            )
-                    result = _call_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result
-                    })
+                if block.type != "tool_use":
+                    continue
+
+                tools_called.add(block.name)
+
+                if block.name == "format_output":
+                    # Capture structured output directly from tool inputs.
+                    # Pydantic validates — if schema error, escalate with specific reason.
+                    try:
+                        data = dict(block.input)
+                        data["ticket_id"] = ticket_id  # always override — model sometimes fills wrong id
+                        return AgentOutput(**data)
+                    except Exception as e:
+                        return AgentOutput(
+                            ticket_id=ticket_id, status="escalated",
+                            product_area="unknown", response="",
+                            justification=f"format_output schema validation failed: {e}",
+                            request_type="product_issue"
+                        )
+
+                result = _call_tool(block.name, block.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result
+                })
+
             if tool_results:
                 messages.append({"role": "user", "content": tool_results})
 
         else:
             return AgentOutput(
                 ticket_id=ticket_id, status="escalated", product_area="unknown",
-                response="", justification=f"Unexpected stop: {response.stop_reason}",
+                response="", justification=f"Unexpected stop reason '{response.stop_reason}' — escalating for safety",
                 request_type="product_issue"
             )
 
     return AgentOutput(
         ticket_id=ticket_id, status="escalated", product_area="unknown",
-        response="", justification=f"Exceeded {MAX_TOOL_ITERATIONS} iterations",
+        response="", justification=f"Exceeded {MAX_TOOL_ITERATIONS} tool iterations without producing output",
         request_type="product_issue"
     )

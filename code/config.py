@@ -24,6 +24,8 @@ CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64  # overlap between chunks prevents splitting mid-sentence
 
 MAX_TOOL_ITERATIONS = 10  # safety cap on agent tool-use loop
+MAX_RETRIES = 3           # retries for transient API failures (rate limits, 5xx)
+RETRY_DELAY = 1.0         # seconds before first retry; doubles each attempt (exponential backoff)
 
 ESCALATION_TRIGGERS = [
     "legal action", "lawsuit", "fraud", "unauthorized charge",

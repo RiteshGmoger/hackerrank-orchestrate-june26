@@ -3,6 +3,7 @@ import csv
 import random
 from pathlib import Path
 from agent import run_agent
+from schema import AgentOutput
 from config import INPUT_CSV, OUTPUT_CSV, SAMPLE_CSV
 
 random.seed(42)
@@ -23,12 +24,25 @@ def run(input_path: Path, output_path: Path) -> None:
         writer = csv.DictWriter(outf, fieldnames=fields)
         writer.writeheader()
 
-        for row in reader:
-            result = run_agent(row)
-            results.append(result)  # FIX: collect here
+        for i, row in enumerate(reader, 1):
+            print(f"[{i}] {row.get('ticket_id', 'unknown')}...", end=" ", flush=True)
+            try:
+                result = run_agent(row)
+            except Exception as e:
+                # CRITICAL: never let one ticket crash the whole run.
+                # Wrap in escalation so output.csv always has a complete row.
+                result = AgentOutput(
+                    ticket_id=row.get("ticket_id", f"row_{i}"),
+                    status="escalated",
+                    product_area="unknown",
+                    response="",
+                    justification=f"Unhandled agent exception: {str(e)}",
+                    request_type="product_issue"
+                )
+            results.append(result)
             writer.writerow(result.model_dump())
             outf.flush()
-            print(f"  ✓ {result.ticket_id}: {result.status} | {result.product_area}")
+            print(f"{result.status} | {result.product_area}")
 
     # Summary
     if results:

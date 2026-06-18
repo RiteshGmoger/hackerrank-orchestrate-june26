@@ -13,6 +13,14 @@ def should_escalate(text: str) -> tuple[bool, str]:
 
     Returns (should_escalate: bool, reason: str)
     """
+    # Guard: empty or whitespace-only messages can't be processed meaningfully
+    if not text or not text.strip():
+        return True, "Empty or whitespace-only message — cannot process ticket"
+
+    # Length check: extremely long inputs are likely adversarial (context stuffing)
+    if len(text) > 5000:
+        return True, f"Message exceeds 5000 chars ({len(text)} chars) — possible context stuffing attack"
+
     t = text.lower()
 
     # Prompt injection / jailbreak detection
