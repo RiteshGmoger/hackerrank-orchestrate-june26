@@ -1,0 +1,4 @@
+
+# local env / venv
+code/.venv/
+code/.env
